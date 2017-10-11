@@ -1,0 +1,221 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html style="width:100%;height: 100%;">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="viewport" content="initial-scale=1.0, user-scalable=no" />
+<style type="text/css">
+body, html {
+	width: 100%;
+	height: 100%;
+	margin: 0;
+	font-family: "微软雅黑";
+}
+
+#allmap {
+	width: 100%;
+	height: 100%;
+}
+
+p {
+	margin-left: 5px;
+	font-size: 14px;
+}
+
+.center {
+	text-align: center;
+}
+
+.dataList {
+	position: absolute;
+	top: 1px;
+	right: 1px;
+	width: 420px;
+	height: 512px;
+	box-shadow: 1px 2px 1px rgba(0, 0, 0, .15);
+	background-color: #FFFFFF;
+	opacity: 0.9;
+	filter: alpha(opacity = 50);
+}
+
+.title {
+	height: 8%;
+	padding-top: 3%;
+}
+
+table>tbody>tr>:first-child {
+	text-align: right;
+}
+
+.layout-wd-20 {
+	width: 23.5%;
+}
+
+.layout-wd-80 {
+	width: 95%;
+}
+
+textarea {
+	overflow: hidden;
+	resize: none;
+}
+</style>
+<script type="text/javascript"
+	src="http://api.map.baidu.com/api?v=2.0&ak=ZH8uESqM7jhj6YljFtRBPRtmAsykNV80"></script>
+<script type="text/javascript" src="jquery-2.1.3.min.js"></script>
+	<script type=text/javascript src=http://api.map.baidu.com/library/TrafficControl/1.4/src/TrafficControl_min.js></script>
+	<script type="text/javascript" src="http://api.map.baidu.com/library/Heatmap/2.0/src/Heatmap_min.js"></script>
+<script type=text/javascript src=http://api.map.baidu.com/library/GeoUtils/1.2/src/GeoUtils_min.js></script>
+<title>圆形区域搜索</title>
+</head>
+<body style="width: 100%; height: 100%;">
+
+	<div id="allmap" style="width: 100%; height: 100%;"></div>
+	<div id="dataList" class="center dataList">
+	<label id="school"></label>
+	经度:<label id="lng"></label>
+	纬度:<label id="lat"></label><br />
+	<input type="button" value="添加区域" onclick='dossss()'/>
+	<input type="button" value="重置" onclick='removepoly()'/><br />
+	当前城市:<select id="selectCity" onchange="selectCity()">
+
+			</select>
+	<input type="button" id="saves" value="保存为可行区" onclick='savePolygon(1)'/>
+	<input type="button" id="saves" value="保存为禁行区" onclick='savePolygon(0)'/>
+	<input type="button" id="saves" value="删除当前城市" onclick='deletePolygon()'/>
+	<div id="content"></div>
+
+	</div>
+</body>
+<script type="text/javascript">
+	var map = new BMap.Map("allmap");
+	var mPoint = new BMap.Point(104.072258, 30.663445);
+	map.enableScrollWheelZoom();
+	map.centerAndZoom(mPoint, 12);
+	map.enableScrollWheelZoom();
+	var heatmapOverlay;
+	$.ajax({
+		   url:"/Count/getUnlockingAll",
+		   type:"POST",
+		   async:false,
+		   data:{name:name},
+		   success:function(data){
+				map.removeOverlay(heatmapOverlay);
+			    heatmapOverlay = new BMapLib.HeatmapOverlay({"radius":10});
+			    map.addOverlay(heatmapOverlay);
+				heatmapOverlay.setDataSet({data:data.result.result,max:50});//
+			    heatmapOverlay.show();
+		   }
+	})
+
+
+	var point_polygon = [];
+	var polygon;
+	function dossss() {
+		var msg = "请选择三个点，当前已经先择";
+		map.addEventListener("click", clickhandel);
+		$("#msg").html(msg + point_polygon.length + "点");
+	}
+	function clickhandel(e) {
+		mapclick(e, point_polygon);
+	}
+
+	function mapclick(e, point_polygon) {
+		if (point_polygon.length < 3) {
+			point_polygon.push(e.point);
+			$("#msg").html("请选择三个点，当前已经先择" + point_polygon.length + "点");
+		} else {
+			map.removeEventListener("click", clickhandel);
+			createPolygon(point_polygon);
+
+		}
+	};
+
+	function createPolygon(point_polygon) {
+		polygon = new BMap.Polygon(point_polygon, {
+			strokeColor : "blue",
+			strokeWeight : 2,
+			strokeOpacity : 0.5
+		}); //创建多边形
+		map.addOverlay(polygon); //增加多边形
+		polygon.enableEditing();
+		polygon.disableMassClear();
+	}
+	function removepoly() {
+		map.removeOverlay(polygon);
+		point_polygon=[];
+		$("#msg").html("请选择三个点，当前已经先择" + point_polygon.length + "点");
+	}
+	function savePolygon(passable){
+		if(!polygon){
+			alert("请先画出区域");
+			return ;
+		}
+		var latlng = polygon.getPath();
+		 var name=prompt("输入区域名","")
+		 var lv=prompt("输入区域等级","")
+		 //var lv=prompt("输入区域等级","")
+
+		$.ajax({
+			   url:"/polygon/add_p",
+			   type:"POST",
+			   async:false,
+			   data:{name:name,lv:lv,passable:passable,cityCode:$("#selectCity").val()},
+			   success:function(data){
+					$.grep(latlng,function(value,index){
+						$.ajax({
+							   url:"/polygon/add_c",
+							   type:"POST",
+							   async:false,
+							   data:{
+								   p_id:data.id,
+								   lng:value.lng,
+								   lat:value.lat,
+								   orderCode:index,
+								   cityCode:$("#selectCity").val()
+								   }
+						})
+					})
+					alert("成功");
+					map.removeOverlay(polygon);
+			   }
+		})
+	}
+	function deletePolygon(){
+		$.ajax({
+			   url:"/polygon/deletepp",
+			   type:"POST",
+			   async:false,
+			   data:{cityCode:$("#selectCity").val()},
+			   success:function(data){
+					alert("成功")
+			   }
+		})
+	}
+	function queryCity(){
+		$.ajax({
+			   url:"/userCity/query",
+			   type:"POST",
+			   async:false,
+			   success:function(data){
+					var size = data.length;
+					for(var i=0;i<size;i++){
+						if(i == 0){
+							$("#selectCity").append("<option selected value='"+data[i].code+"'>"+data[i].name+"</option>");
+						}else{
+							$("#selectCity").append("<option  value='"+data[i].code+"'>"+data[i].name+"</option>");
+						}
+					}
+
+			   }
+		})
+	}
+	function selectCity(){
+
+		map.centerAndZoom($("#selectCity option:selected").html(), 12);
+
+	}
+
+	selectCity();
+	queryCity();
+</script>
+</html>
